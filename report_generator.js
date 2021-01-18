@@ -7,14 +7,13 @@ const fs = require('fs');
 var results = [];
 var metrics = ["FCP", "LCP", "TTI", "CLS", "TBT", "FID"];
 
-generateReport();
 
 function readResults() {
     var rawdata = fs.readFileSync('results.json');
     results = JSON.parse(rawdata);
 }
 
-function generateReport() {
+export function generateReport() {
     readResults();
     var fileName = 'result.html';
     var stream = fs.createWriteStream(fileName);
@@ -27,20 +26,20 @@ function generateReport() {
 }
 
 function buildHtml() {
-    var header = '';
+    var header = '<link rel="stylesheet" href="styles.css">';
     var body = generateTable();
 
     // concatenate header string
     // concatenate body string
 
     return '<!DOCTYPE html>'
-        + '<html><head>' + header + '</head><body>' + body + '</body></html>';
+        + '<html><head>' + header + '</head><body><div>' + body + '</div></body></html>';
 }
 
 function generateTable() {
     // EXTRACT VALUE FOR HTML HEADER. 
 
-    var col = ['frameworks/metrics'];
+    var col = ['metrics/ frameworks'];
     for (var i = 0; i < results.length; i++) {
         for (var key in results[i]) {
             if (key === 'name') {

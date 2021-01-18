@@ -1,6 +1,13 @@
+export async function calculateMetrics() {
+    await calculateCLS();
+    await calculateFCP();
+    await calculateLCP();
+    await calculateFID();
+    await calculateTTI();
+}
 
 
-async function calculateFID() {
+export async function calculateFID() {
     window.fid = 0;
     const observer = new PerformanceObserver((entryList) => {
         const firstInput = entryList.getEntries()[0];
@@ -15,18 +22,18 @@ async function calculateFID() {
       observer.observe({type: 'first-input', buffered: true});
 } 
 
-async function calculateFCP() {
+export async function calculateFCP() {
     window.fcp = 0;
-    var observer = new PerformanceObserver(function(list) {
-        var fcp = list.getEntriesByName('first-contentful-paint');
-        console.log('fcp', fcp[0].startTime);
-    });
-    
-    // register observer for paint timing notifications
-    observer.observe({entryTypes: ["paint"]});
+    new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntriesByName('first-contentful-paint')) {
+          console.log('FCP candidate:', entry.startTime, entry);
+          window.fcp = entry.startTime;
+        }
+      }).observe({type: 'paint', buffered: true});
+
 }
 
-async function calculateCLS() {
+export async function calculateCLS() {
     window.cls = 0;
     const observer = new PerformanceObserver((entryList) => {
         for (const entry of entryList.getEntries()) {
@@ -40,13 +47,13 @@ async function calculateCLS() {
 
 }
 
-async function calculateLCP() {
-    window.largestContentfulPaint = 0;
+export async function calculateLCP() {
+    window.lcp = 0;
 
     const observer = new PerformanceObserver((entryList) => {
         const entries = entryList.getEntries();
         const lastEntry = entries[entries.length - 1];
-        window.largestContentfulPaint = lastEntry.renderTime || lastEntry.loadTime;
+        window.lcp = lastEntry.renderTime || lastEntry.loadTime;
     });
 
     observer.observe({ type: 'largest-contentful-paint', buffered: true });
@@ -55,7 +62,17 @@ async function calculateLCP() {
         if (document.visibilityState === 'hidden') {
             observer.takeRecords();
             observer.disconnect();
-            console.log('LCP:', window.largestContentfulPaint);
         }
     });
+}
+
+export async function calculateTTI() {
+    await page.evaluate(async () => {
+        new PerformanceObserver(function (list) {
+            var perfEntries = list.getEntries();
+            for (var i = 0; i < perfEntries.length; i++) {
+                console.log(JSON.stringify(perfEntries[i]));
+            }
+        }).observe({ entryTypes: ["longtask"] });
+    })
 }
