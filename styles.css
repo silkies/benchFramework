@@ -1,0 +1,18 @@
+table, th, td {
+  border: 1px solid black;
+}
+
+ table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+html, body {
+    font-family: Verdana,sans-serif;
+    font-size: 15px;
+    line-height: 2;
+}
+
+div {
+    width: 600px;
+}
