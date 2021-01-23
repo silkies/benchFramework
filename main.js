@@ -1,7 +1,10 @@
+'use strict'
 import { createRequire } from 'module';
-import { calculateCLS, calculateFCP, calculateLCP, calculateFID, calculateTTI } from './calculator.js';
-import { processFile } from './app_provider.js';
+import { calculateCLS, calculateFCP, calculateLCP, calculateFID, calculateTTIandTBT } from './calculator.js';
+import { getApplications } from './app_provider.js';
+import { getSelector } from './workflow_provider.js'
 import { generateReport } from './report_generator.js';
+
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 
@@ -12,9 +15,10 @@ const reportGenerator = require('lighthouse/lighthouse-core/report/report-genera
 const request = require('request');
 const util = require('util');
 
-let browser;
-let page;
-
+//let browser;
+var page;
+const counter = 2;
+const metrics = ["FCP", "LCP", "FID", "TBT", "CLS"];
 const options = {
     logLevel: 'error',
     disableDeviceEmulation: true,
@@ -51,131 +55,194 @@ async function lighthouseFromPuppeteer(url, options, config = null) {
         Time To Interactive: ${time_to_interactive}`);
 }
 
-
-async function launchBrowser() {
+const launchChromeBrowser = async () => {
     const chrome = await chromeLauncher.launch(options);
     options.port = chrome.port;
 
     // Connect chrome-launcher to puppeteer
     const resp = await util.promisify(request)(`http://localhost:${options.port}/json/version`);
     const { webSocketDebuggerUrl } = JSON.parse(resp.body);
-    browser = await puppeteer.connect({ browserWSEndpoint: webSocketDebuggerUrl });
-    //browser = await puppeteer.launch({executablePath: "/usr/bin/google-chrome-stable"});
+    let browser = await puppeteer.connect({ browserWSEndpoint: webSocketDebuggerUrl });
+    page = await browser.newPage();
 
+    setNetworkConditions();
+    return browser;
 }
 
-async function navigateToURL() {
+async function launchBrowser() {
+    let browser = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome-stable", headless: false });
     page = await browser.newPage();
+
+    setNetworkConditions();
+
+    return browser;
+}
+
+const setNetworkConditions = async () => {
     const client = await page.target().createCDPSession()
 
-    // Set throttling property
+    // Set network conditions
     await client.send('Network.emulateNetworkConditions', {
         'offline': false,
-        'downloadThroughput': 4 * 1024 * 1024 / 8,
-        'uploadThroughput': 3 * 1024 * 1024 / 8,
-        'latency': 20
+    'downloadThroughput': 1.5 * 1024 * 1024 / 8,
+    'uploadThroughput': 750 * 1024 / 8,
+    'latency': 40
     });
     await client.send('Network.enable');
     await client.send('ServiceWorker.enable');
     await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+}
 
-    const navigationPromise = page.waitForNavigation();
+const injectComputations = async () => {
+    await page.evaluate(calculateCLS);
+    await page.evaluate(calculateFCP);
+    await page.evaluate(calculateFID);
+    await page.evaluate(calculateLCP);
+    await page.evaluate(calculateTTIandTBT);
+}
 
-    await page.evaluateOnNewDocument(calculateCLS);
-    await page.evaluateOnNewDocument(calculateFCP);
-    await page.evaluateOnNewDocument(calculateFID);
-    await page.evaluateOnNewDocument(calculateLCP);
-    await page.evaluateOnNewDocument(calculateTTI);
+async function navigateToURL(url) {
+
+    const navigationPromise = page.waitForNavigation({
+        waitUntil: 'networkidle0',
+        timeout: 100000
+    });
 
 
-    await page.goto('http://bbc.com', { waitUntil: 'load', timeout: 60000 });
+    await page.goto(url);
     //await page.addScriptTag({ url: 'https://unpkg.com/web-vitals' })
+    await injectComputations();
+
 
     await navigationPromise;
 
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-
 }
 
-async function getMetrics(name) {
-    //insert all calculations in page
+async function getMetrics() {
+    //await page.waitForTimeout(10000);
     //get metrcis by metrci, compose in metrics json array
     let cls = await page.evaluate(() => {
         return window.cls;
     });
-    console.log('CLS:', cls);
 
     let fid = await page.evaluate(() => {
         return window.fid;
     });
-    console.log('FID:', fid);
 
     let fcp = await page.evaluate(() => {
         return window.fcp;
     });
-    console.log('FCP:', fcp);
 
     let lcp = await page.evaluate(() => {
         return window.lcp;
     });
-    console.log('LCP:', lcp);
-    
-    let result = { 
-        name: name,
-        FCP: fcp, 
-        LCP: lcp,
-        FID: fid,
-        CLS: cls 
-    };
-    let data = JSON.stringify(result);
-    fs.writeFileSync('student-2.json', data);
-    return result;
 
+    let tbt = await page.evaluate(() => {
+        return window.tbt;
+    });
+
+    let tti = await page.evaluate(() => {
+        return window.tti;
+    });
+
+    let allMetrics = {
+        FCP: Math.round(fcp * 100) / 100,
+        LCP: Math.round(lcp * 100) / 100,
+        FID: Math.round(fid * 100) / 100,
+        TBT: Math.round(tbt * 100) / 100,
+        TTI: Math.round(tti * 100) / 100,
+        CLS: Math.round(cls * 100) / 100
+    };
+    return allMetrics;
 }
 
-async function shutdownBrowser() {
+async function shutdownBrowser(browser) {
     await browser.close();
 }
 
+const analysis = (data) => {
+    let minValue = Math.min(...data);
+    let maxValue = Math.max(...data);
+    let mean = data.reduce((a, b) => a + b) / data.length;
+    let variance = data.map(function (num) {
+        return Math.pow(num - mean, 2);
+    }).reduce((a, b) => a + b) / data.length;
+
+
+    let result = {
+        min: minValue,
+        max: maxValue,
+        mean: Math.round(mean * 100) / 100,
+        variance: Math.round(variance * 100) / 100
+    };
+    return result;
+}
 async function main() {
-    await launchBrowser();
 
-    let appData = processFile();
-    for(let item in appData) {
-        console.log(item)
-    }
-    await navigateToURL();
+    let finalReportPage1 = [];
+    let appData = getApplications();
+    //iterate all apps
+    for (let i = 0; i < appData.length; i++) {
+        let resultsPage1 = [];
+        let resultsPage2 = [];
 
+        //iterate counter for further analysis
+        for (let j = 0; j < counter; j++) {
+            //get all metrics and push to results
+            let browser = await launchBrowser();
+            await navigateToURL(appData[i].url);
+            await page.type('#orb-search-q', 'Fleetwood Mac Dreams')
+            let currentResults = await getMetrics();
+            console.log(currentResults, 'page 1')
 
-    await page.type('#orb-search-q', 'Fleetwood Mac Dreams')
-    getMetrics('bla');
-
-
-    const chrome = await chromeLauncher.launch(options);
-    options.port = chrome.port;
-
-    // Connect chrome-launcher to puppeteer
-
-    const { lhr } = await lighthouse("https://bbc.com", options, null);
-
-    const json = reportGenerator.generateReport(lhr, 'json');
-
-    const audits = JSON.parse(json).audits; // Lighthouse audits
-    const first_contentful_paint = audits['first-contentful-paint'].displayValue;
-    const total_blocking_time = audits['total-blocking-time'].displayValue;
-    const time_to_interactive = audits['interactive'].displayValue;
-    const lcp = audits['largest-contentful-paint'].displayValue;
+            currentResults.name = appData[i].name;
+            currentResults.id = j;
+            resultsPage1.push(currentResults);
 
 
-    console.log(`\n
-       Lighthouse metrics: 
-        First Contentful Paint: ${first_contentful_paint}, 
-        Total Blocking Time: ${total_blocking_time},
-        Time To Interactive: ${time_to_interactive},
-        LCP: ${lcp}`);
-    
+            //navigate to page 2 and perform the same analysis
+            // const [response] = await Promise.all([
+            //     page.waitForNavigation({
+            //         waitUntil: 'networkidle0',
+            //     }),
+            //     page.click(".orb-nav-newsdotcom"),
+            // ]);
+            // console.log(page.url());
+            // await setNetworkConditions();
+            // await page.type('#orb-search-q', 'Fleetwood Mac Dreams')
 
-    shutdownBrowser();
+            // //await page.waitForNavigation();
+            // await injectComputations();
+
+            // currentResults = await getMetrics();
+            // console.log(currentResults, 'page 2');
+            // currentResults.name = appData[i].name;
+            // currentResults.id = j;
+            // resultsPage2.push(currentResults);
+
+            await shutdownBrowser(browser);
+        }
+
+        finalReportPage1.push({ name: appData[i].name });
+        metrics.map(metric => {
+            let metricsArr = resultsPage1.map(item => { return item[metric] })
+            let res = analysis(metricsArr)
+            res.values = metricsArr;
+            finalReportPage1[i][metric] = res;
+            //console.log(res)
+        });
+
+        let dataToWrite = JSON.stringify(resultsPage1);
+        fs.writeFileSync(`result ${appData[i].name}.json`, dataToWrite);
+
+    };
+
+
+    let dataToWrite = JSON.stringify(finalReportPage1);
+    fs.writeFileSync(`resultPage1.json`, dataToWrite);
+    console.log(finalReportPage1);
+
 }
 //lighthouseFromPuppeteer("https://bbc.com", options);
 
