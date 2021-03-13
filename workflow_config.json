@@ -1,4 +1,4 @@
 {
-"selector": "#selector"
-} 
-
+    "selector": "#product-12",
+    "input": "#search"
+}
