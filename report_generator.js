@@ -5,17 +5,17 @@ const require = createRequire(import.meta.url);
 const fs = require('fs');
 
 var results = [];
-var metrics = ["FCP", "LCP", "TTI", "CLS", "TBT", "FID"];
+const metrics = ['FCP', 'LCP', 'TTI', 'CLS', 'TBT', 'FID'];
 
-
-function readResults() {
-    var rawdata = fs.readFileSync('results.json');
+generateReport();
+function readResults(filename) {
+    var rawdata = fs.readFileSync(filename);
     results = JSON.parse(rawdata);
 }
 
 export function generateReport() {
-    readResults();
-    var fileName = 'result.html';
+    //readResults();
+    var fileName = 'results.html';
     var stream = fs.createWriteStream(fileName);
 
     stream.once('open', function (fd) {
@@ -25,9 +25,25 @@ export function generateReport() {
     });
 }
 
-function buildHtml() {
-    var header = '<link rel="stylesheet" href="styles.css">';
-    var body = generateTable();
+ function buildHtml() {
+    var header = '<link rel=\'stylesheet\' href=\'styles.css\'>';
+    readResults('resultPage1.json');
+    var body = '<p>Results for page 1</p><div>';
+    var table1 = generateTable();
+    body += table1;
+    body += '</div>';
+
+    readResults('resultPage2.json');
+    body += '<p>Results for page 2</p><div>';
+    var table2 = generateTable();
+    body += table2;
+    body += '</div>';
+
+    readResults('resultPage3.json');
+    body += '<p>Results for page 3</p><div>';
+    var table2 = generateTable();
+    body += table2;
+    body += '</div>';
 
     // concatenate header string
     // concatenate body string
@@ -37,7 +53,7 @@ function buildHtml() {
 }
 
 function generateTable() {
-    // EXTRACT VALUE FOR HTML HEADER. 
+    // extract values for header
 
     var col = ['metrics/ frameworks'];
     for (var i = 0; i < results.length; i++) {
@@ -50,41 +66,41 @@ function generateTable() {
         }
     }
 
-    // CREATE DYNAMIC TABLE.
     var table = '<table>';
 
-    // CREATE HTML TABLE HEADER ROW USING THE EXTRACTED HEADERS ABOVE.
-
-    var tr = '<tr>';                   // TABLE ROW.
+    // create table header
+    var tr = '<tr>';                   // row
 
     for (var i = 0; i < col.length; i++) {
-        var th = '<th>';      // TABLE HEADER.
+        var th = '<th>';      // header
         th += col[i];
         th += '</th>'
         tr += th;
     }
     tr += '</tr>';
-    table += tr
+    table += tr;
 
-    // ADD JSON DATA TO THE TABLE AS ROWS.
-
+    // add data as rows
     for (var i = 0; i < metrics.length; i++) {
         var trKey = '<tr>';
         var tabCell = '<td>'
         tabCell += metrics[i];
-        console.log(metrics[i]);
         tabCell += '</td>';
         trKey += tabCell
         for (var j = 0; j < results.length; j++) {
             var cell = '<td>'
-            cell += results[j][metrics[i]];
+            for (const [key, value] of Object.entries(results[j][metrics[i]])) {
+                    cell += `${key}: ${value}`;
+                    cell+= '<br>';
+            }
             cell += '</td>';
             trKey += cell;
         }
         trKey += '</tr>'
         table += trKey;
     }
-    return table
+    table += '</table>';
+    return table;
 
 }
 
