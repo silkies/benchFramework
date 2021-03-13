@@ -1,18 +1,17 @@
 [
     {
-    "name": "single-spa csr",
-    "url": "http://localhost:9000"
+        "name": "single-spa csr",
+        "url1": "http://localhost:9000/products",
+        "url2": "http://localhost:9000/products/12"
     },
     {
-    "name": "single-spa ssr",
-    "url": "http://localhost:9000"
+        "name": "ara csr",
+        "url1": "http://localhost:3010/products",
+        "url2": "http://localhost:3010/products/12"
     },
     {
-    "name": "ara csr",
-    "url": "http://localhost:9000"
-    },
-    {
-    "name": "ara ssr",
-    "url": "http://localhost:9000"
+        "name": "ara ssr",
+        "url1": "http://localhost:1234/products",
+        "url2": "http://localhost:1234/products/12"
     }
 ]
